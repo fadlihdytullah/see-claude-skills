@@ -1,6 +1,6 @@
 {
   "name": "see-claude-skills",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browse Claude Code skills installed in ~/.claude/skills — interactive terminal UI plus Linear-styled web preview with markdown rendering.",
   "keywords": [
     "claude",
@@ -13,11 +13,12 @@
   ],
   "type": "module",
   "bin": {
-    "see-claude-skills": "./index.ts"
+    "see-claude-skills": "index.ts"
   },
   "files": [
     "index.ts",
-    "LICENSE"
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
     "start": "node index.ts"
