@@ -1,6 +1,6 @@
 {
   "name": "see-claude-skills",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Browse Claude Code skills installed in ~/.claude/skills — interactive terminal UI plus Linear-styled web preview with markdown rendering.",
   "keywords": [
     "claude",
@@ -13,18 +13,21 @@
   ],
   "type": "module",
   "bin": {
-    "see-claude-skills": "index.ts"
+    "see-claude-skills": "dist/index.js"
   },
   "files": [
-    "index.ts",
+    "dist",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "start": "node index.ts"
+    "build": "tsc",
+    "dev": "node index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
-    "node": ">=22.6"
+    "node": ">=18.0.0"
   },
   "author": "Fadli Hidayatullah <fadli.hidayatullah@opto.id>",
   "license": "MIT",
@@ -35,5 +38,9 @@
   "bugs": {
     "url": "https://github.com/fadlihdytullah/see-claude-skills/issues"
   },
-  "homepage": "https://github.com/fadlihdytullah/see-claude-skills#readme"
+  "homepage": "https://github.com/fadlihdytullah/see-claude-skills#readme",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3"
+  }
 }
