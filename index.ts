@@ -413,7 +413,7 @@ function renderHtml(skills: Skill[]): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>claude-skills-viewer · ${skills.length} skills</title>
+    <title>see-claude-skills · ${skills.length} skills</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -895,7 +895,7 @@ function renderHtml(skills: Skill[]): string {
       <header class="topbar">
         <div class="brand">
           <span class="dot"></span>
-          <span>claude-skills-viewer</span>
+          <span>see-claude-skills</span>
           <span class="brand-meta mono">v0.1</span>
         </div>
 
@@ -1053,7 +1053,7 @@ function renderHtml(skills: Skill[]): string {
           query: '',
           selected: null,
           selectedFile: null,
-          theme: localStorage.getItem('claude-skills-viewer-theme') || 'system',
+          theme: localStorage.getItem('see-claude-skills-theme') || 'system',
           copied: false,
 
           init() {
@@ -1149,7 +1149,7 @@ function renderHtml(skills: Skill[]): string {
             const order = ['system', 'light', 'dark'];
             const next = order[(order.indexOf(this.theme) + 1) % order.length];
             this.theme = next;
-            localStorage.setItem('claude-skills-viewer-theme', next);
+            localStorage.setItem('see-claude-skills-theme', next);
             applyTheme(next);
           },
 
@@ -1184,7 +1184,7 @@ function openInBrowser(filePath: string) {
 }
 
 async function runWeb(skills: Skill[]) {
-  const dir = await mkdtemp(join(tmpdir(), "claude-skills-viewer-"));
+  const dir = await mkdtemp(join(tmpdir(), "see-claude-skills-"));
   const file = join(dir, "skills.html");
   const html = renderHtml(skills);
   await writeFile(file, html, "utf8");
@@ -1192,7 +1192,7 @@ async function runWeb(skills: Skill[]) {
   const totalFiles = skills.reduce((acc, s) => acc + s.files.length, 0);
 
   console.log();
-  console.log(`${c.bold}${c.cyan}claude-skills-viewer${c.reset} ${c.dim}— web preview${c.reset}`);
+  console.log(`${c.bold}${c.cyan}see-claude-skills${c.reset} ${c.dim}— web preview${c.reset}`);
   console.log(`  ${c.green}✓${c.reset} ${skills.length} skill${skills.length === 1 ? "" : "s"}, ${totalFiles} files indexed`);
   console.log(`  ${c.gray}file://${file}${c.reset}`);
   console.log();
@@ -1208,13 +1208,13 @@ async function main() {
 
   if (wantsHelp) {
     console.log(`
-${c.bold}claude-skills-viewer${c.reset} — list skills installed in ~/.claude/skills
+${c.bold}see-claude-skills${c.reset} — list skills installed in ~/.claude/skills
 
 ${c.bold}Usage:${c.reset}
-  claude-skills-viewer            Interactive compact list (default)
-  claude-skills-viewer --plain    Print plain list (good for piping)
-  claude-skills-viewer --web      Open an HTML preview in your browser
-  claude-skills-viewer --help     Show this help
+  see-claude-skills            Interactive compact list (default)
+  see-claude-skills --plain    Print plain list (good for piping)
+  see-claude-skills --web      Open an HTML preview in your browser
+  see-claude-skills --help     Show this help
 
 ${c.bold}Interactive keys:${c.reset}
   ${c.dim}↑↓${c.reset} or ${c.dim}j/k${c.reset}    navigate

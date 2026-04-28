@@ -1,5 +1,5 @@
 {
-  "name": "claude-skills-viewer",
+  "name": "see-claude-skills",
   "version": "0.1.0",
   "description": "Browse Claude Code skills installed in ~/.claude/skills — interactive terminal UI plus Linear-styled web preview with markdown rendering.",
   "keywords": [
@@ -13,7 +13,7 @@
   ],
   "type": "module",
   "bin": {
-    "claude-skills-viewer": "./index.ts"
+    "see-claude-skills": "./index.ts"
   },
   "files": [
     "index.ts",
@@ -29,10 +29,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fadlihdytullah/claude-skills-viewer.git"
+    "url": "git+https://github.com/fadlihdytullah/see-claude-skills.git"
   },
   "bugs": {
-    "url": "https://github.com/fadlihdytullah/claude-skills-viewer/issues"
+    "url": "https://github.com/fadlihdytullah/see-claude-skills/issues"
   },
-  "homepage": "https://github.com/fadlihdytullah/claude-skills-viewer#readme"
+  "homepage": "https://github.com/fadlihdytullah/see-claude-skills#readme"
 }
