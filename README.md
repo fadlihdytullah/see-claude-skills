@@ -80,18 +80,30 @@ npm install -g see-claude-skills
 
 ## Requirements
 
-- Node.js **>= 22.6** (the bin entry is a `.ts` file relying on Node's built-in TypeScript stripping)
+- Node.js **>= 18**
+
+No runtime dependencies — the published package ships a single bundled `dist/index.js` (the web preview pulls Tailwind, marked, highlight.js, and Alpine.js from CDNs at view time).
 
 ## Development
 
 ```bash
 git clone https://github.com/fadlihdytullah/see-claude-skills.git
 cd see-claude-skills
-npm link            # installs the bin globally, symlinked to your clone
-see-claude-skills   # run it
+npm install
+
+# Iterate on the .ts source directly (needs Node >= 22.6 for TS strip)
+npm run dev          # = node index.ts
+
+# Or build + run the compiled version
+npm run build        # tsc → dist/index.js
+npm start            # = node dist/index.js
+
+# Install the global bin, symlinked to your clone
+npm link
+see-claude-skills
 ```
 
-Single-file TypeScript, no build step, no runtime dependencies.
+Source is a single `index.ts`. `npm publish` triggers `prepublishOnly` which runs `tsc` so the tarball always ships an up-to-date `dist/`.
 
 ## License
 
