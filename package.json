@@ -1,0 +1,38 @@
+{
+  "name": "claude-skills-viewer",
+  "version": "0.1.0",
+  "description": "Browse Claude Code skills installed in ~/.claude/skills — interactive terminal UI plus Linear-styled web preview with markdown rendering.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "skills",
+    "anthropic",
+    "agent",
+    "cli",
+    "tui"
+  ],
+  "type": "module",
+  "bin": {
+    "claude-skills-viewer": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node index.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "author": "Fadli Hidayatullah <fadli.hidayatullah@opto.id>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fadlihdytullah/claude-skills-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fadlihdytullah/claude-skills-viewer/issues"
+  },
+  "homepage": "https://github.com/fadlihdytullah/claude-skills-viewer#readme"
+}
