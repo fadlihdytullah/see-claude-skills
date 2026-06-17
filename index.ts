@@ -13,7 +13,7 @@ import { homedir, tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 
-const SKILLS_DIR = join(homedir(), ".claude", "skills");
+const GLOBAL_SKILLS_DIR = join(homedir(), ".claude", "skills");
 const MAX_FILE_BYTES = 256 * 1024;
 
 const c = {
@@ -40,6 +40,7 @@ interface Skill {
   description: string;
   isSymlink: boolean;
   realPath: string;
+  source: "global" | "local";
   files: SkillFile[];
 }
 
@@ -148,8 +149,12 @@ async function walkDir(
   }
 }
 
-async function readSkill(entryName: string): Promise<Skill | null> {
-  const skillPath = join(SKILLS_DIR, entryName);
+async function readSkill(
+  entryName: string,
+  skillsDir: string,
+  source: "global" | "local",
+): Promise<Skill | null> {
+  const skillPath = join(skillsDir, entryName);
   let resolved: string;
   try {
     resolved = await realpath(skillPath);
@@ -177,27 +182,83 @@ async function readSkill(entryName: string): Promise<Skill | null> {
     description: fm.description || "(no description)",
     isSymlink: ls.isSymbolicLink(),
     realPath: resolved,
+    source,
     files,
   };
 }
 
+async function findLocalSkillsDir(): Promise<string | null> {
+  const globalReal = await realpath(GLOBAL_SKILLS_DIR).catch(() => null);
+  let dir = process.cwd();
+
+  while (true) {
+    const candidate = join(dir, ".claude", "skills");
+    try {
+      const candidateReal = await realpath(candidate);
+      if (candidateReal !== globalReal) {
+        const st = await stat(candidateReal);
+        if (st.isDirectory()) return candidateReal;
+      }
+    } catch {}
+
+    const parent = join(dir, "..");
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
 async function loadSkills(): Promise<Skill[]> {
-  const entries = await readdir(SKILLS_DIR);
-  const skills = (await Promise.all(entries.map(readSkill))).filter(
-    (s): s is Skill => s !== null,
-  );
-  skills.sort((a, b) => a.name.localeCompare(b.name));
-  return skills;
+  const all: Skill[] = [];
+
+  try {
+    const entries = await readdir(GLOBAL_SKILLS_DIR);
+    const globalSkills = (
+      await Promise.all(
+        entries.map((e) => readSkill(e, GLOBAL_SKILLS_DIR, "global")),
+      )
+    ).filter((s): s is Skill => s !== null);
+    all.push(...globalSkills);
+  } catch {}
+
+  const localDir = await findLocalSkillsDir();
+  if (localDir) {
+    try {
+      const entries = await readdir(localDir);
+      const localSkills = (
+        await Promise.all(
+          entries.map((e) => readSkill(e, localDir, "local")),
+        )
+      ).filter((s): s is Skill => s !== null);
+      all.push(...localSkills);
+    } catch {}
+  }
+
+  all.sort((a, b) => {
+    if (a.source !== b.source) return a.source === "local" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return all;
 }
 
 function renderTerminal(skills: Skill[]) {
   const termWidth = process.stdout.columns || 80;
   const wrapWidth = Math.max(40, termWidth - 6);
 
+  const localCount = skills.filter((s) => s.source === "local").length;
+  const globalCount = skills.length - localCount;
+
   console.log();
-  console.log(
-    `${c.bold}${c.cyan}Skills in ~/.claude/skills${c.reset} ${c.dim}(${skills.length} total)${c.reset}`,
-  );
+  if (localCount > 0) {
+    console.log(
+      `${c.bold}${c.cyan}Claude skills${c.reset} ${c.dim}(${skills.length} total · ${localCount} local + ${globalCount} global)${c.reset}`,
+    );
+  } else {
+    console.log(
+      `${c.bold}${c.cyan}Skills in ~/.claude/skills${c.reset} ${c.dim}(${skills.length} total)${c.reset}`,
+    );
+  }
   console.log();
 
   if (skills.length === 0) {
@@ -207,8 +268,12 @@ function renderTerminal(skills: Skill[]) {
 
   for (const skill of skills) {
     const linkBadge = skill.isSymlink ? ` ${c.magenta}↪ symlink${c.reset}` : "";
+    const sourceBadge =
+      skill.source === "local" ? ` ${c.yellow}[local]${c.reset}` : "";
     const fileBadge = ` ${c.dim}· ${skill.files.length} file${skill.files.length === 1 ? "" : "s"}${c.reset}`;
-    console.log(`  ${c.bold}${c.green}${skill.name}${c.reset}${linkBadge}${fileBadge}`);
+    console.log(
+      `  ${c.bold}${c.green}${skill.name}${c.reset}${sourceBadge}${linkBadge}${fileBadge}`,
+    );
     console.log(
       `${c.gray}${wrap(skill.description, wrapWidth, "    ")}${c.reset}`,
     );
@@ -243,6 +308,8 @@ function runInteractive(skills: Skill[]): Promise<void> {
     const expanded = new Set<number>();
     let allExpanded = false;
 
+    const localCount = skills.filter((s) => s.source === "local").length;
+
     const nameWidth = Math.min(
       28,
       Math.max(...skills.map((s) => s.name.length)),
@@ -256,9 +323,12 @@ function runInteractive(skills: Skill[]): Promise<void> {
       const ruleW = Math.min(w - 1, 56);
       const out: string[] = [];
 
-      out.push(
-        `${c.bold}${c.cyan}~/.claude/skills${c.reset} ${c.dim}· ${skills.length}${c.reset}`,
-      );
+      const headerSuffix =
+        localCount > 0
+          ? `${c.dim}· ${skills.length}${c.reset} ${c.gray}(${localCount}L ${skills.length - localCount}G)${c.reset}`
+          : `${c.dim}· ${skills.length}${c.reset}`;
+
+      out.push(`${c.bold}${c.cyan}Claude skills${c.reset} ${headerSuffix}`);
       out.push(`${c.gray}${"─".repeat(ruleW)}${c.reset}`);
 
       for (let i = 0; i < skills.length; i++) {
@@ -274,14 +344,18 @@ function runInteractive(skills: Skill[]): Promise<void> {
             : s.name.padEnd(nameWidth);
         const count = String(s.files.length).padStart(countWidth);
         const sym = s.isSymlink ? `${c.magenta}↪${c.reset}` : " ";
+        const localMark =
+          s.source === "local" ? `${c.yellow}L${c.reset}` : " ";
 
         out.push(
-          ` ${arrowColor}${arrow}${c.reset} ${nameStyle}${name}${c.reset}  ${c.dim}${count}${c.reset} ${sym}`,
+          ` ${arrowColor}${arrow}${c.reset} ${nameStyle}${name}${c.reset}  ${c.dim}${count}${c.reset} ${sym}${localMark}`,
         );
 
         if (isExp) {
           const wrapWidth = Math.max(30, w - 6);
-          out.push(`${c.gray}${wrap(s.description, wrapWidth, "      ")}${c.reset}`);
+          out.push(
+            `${c.gray}${wrap(s.description, wrapWidth, "      ")}${c.reset}`,
+          );
         }
       }
 
@@ -398,6 +472,7 @@ function renderHtml(skills: Skill[]): string {
     description: s.description,
     isSymlink: s.isSymlink,
     realPath: s.realPath,
+    source: s.source,
     files: s.files.map((f) => ({
       path: f.path,
       size: f.size,
@@ -437,6 +512,8 @@ function renderHtml(skills: Skill[]): string {
         --accent-2: #10b981;
         --accent-bg: rgba(16, 185, 129, 0.08);
         --accent-glow: rgba(16, 185, 129, 0.18);
+        --local: #d97706;
+        --local-bg: rgba(217, 119, 6, 0.10);
         --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
         --shadow-md: 0 4px 14px -4px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
       }
@@ -454,6 +531,8 @@ function renderHtml(skills: Skill[]): string {
         --accent-2: #10b981;
         --accent-bg: rgba(52, 211, 153, 0.08);
         --accent-glow: rgba(52, 211, 153, 0.22);
+        --local: #fbbf24;
+        --local-bg: rgba(251, 191, 36, 0.10);
         --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
         --shadow-md: 0 4px 16px -4px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
       }
@@ -579,6 +658,14 @@ function renderHtml(skills: Skill[]): string {
         text-transform: uppercase; letter-spacing: 0.06em;
         color: var(--text-3);
         padding: 12px 12px 8px;
+        display: flex; align-items: center; gap: 6px;
+      }
+      .sidebar-section-label {
+        font-size: 10px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--text-3);
+        padding: 10px 12px 4px;
+        margin-top: 4px;
       }
       .skill-item {
         display: block;
@@ -630,6 +717,15 @@ function renderHtml(skills: Skill[]): string {
         background: color-mix(in srgb, var(--accent) 12%, transparent);
         color: var(--accent);
         margin-left: 6px;
+      }
+      .local-pill {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: var(--local-bg);
+        color: var(--local);
+        flex-shrink: 0;
       }
 
       main.workspace {
@@ -693,6 +789,10 @@ function renderHtml(skills: Skill[]): string {
         font-family: 'Geist Mono', monospace;
         font-size: 11px;
         color: var(--text-2);
+      }
+      .skill-header .meta .local-tag {
+        color: var(--local);
+        font-weight: 500;
       }
 
       .files-section {
@@ -927,11 +1027,18 @@ function renderHtml(skills: Skill[]): string {
       <aside class="sidebar">
         <div class="sidebar-label">
           <span x-text="filteredSkills.length === skills.length ? skills.length + ' skills' : filteredSkills.length + ' / ' + skills.length"></span>
+          <template x-if="hasLocal">
+            <span class="local-pill" style="text-transform:none;letter-spacing:normal" x-text="localSkillCount + 'L ' + globalSkillCount + 'G'"></span>
+          </template>
         </div>
-        <template x-for="skill in filteredSkills" :key="skill.name">
+
+        <template x-if="hasLocal && filteredLocalSkills.length > 0">
+          <div class="sidebar-section-label">Local</div>
+        </template>
+        <template x-for="skill in filteredLocalSkills" :key="'local/' + skill.name">
           <button
             class="skill-item"
-            :class="{ active: selected && selected.name === skill.name }"
+            :class="{ active: selected && selected.name === skill.name && selected.source === skill.source }"
             @click="select(skill)"
           >
             <div class="row1">
@@ -941,6 +1048,40 @@ function renderHtml(skills: Skill[]): string {
             <div class="preview" x-text="skill.description"></div>
           </button>
         </template>
+
+        <template x-if="hasLocal && filteredGlobalSkills.length > 0">
+          <div class="sidebar-section-label">Global</div>
+        </template>
+        <template x-for="skill in filteredGlobalSkills" :key="'global/' + skill.name">
+          <button
+            class="skill-item"
+            :class="{ active: selected && selected.name === skill.name && selected.source === skill.source }"
+            @click="select(skill)"
+          >
+            <div class="row1">
+              <span class="name" x-text="skill.name"></span>
+              <span class="count" x-text="skill.files.length"></span>
+            </div>
+            <div class="preview" x-text="skill.description"></div>
+          </button>
+        </template>
+
+        <template x-if="!hasLocal">
+          <template x-for="skill in filteredSkills" :key="skill.name">
+            <button
+              class="skill-item"
+              :class="{ active: selected && selected.name === skill.name }"
+              @click="select(skill)"
+            >
+              <div class="row1">
+                <span class="name" x-text="skill.name"></span>
+                <span class="count" x-text="skill.files.length"></span>
+              </div>
+              <div class="preview" x-text="skill.description"></div>
+            </button>
+          </template>
+        </template>
+
         <template x-if="filteredSkills.length === 0">
           <div style="padding: 16px; color: var(--text-3); font-size: 12px; text-align: center;">
             No matches for <span class="mono" x-text="'&quot;' + query + '&quot;'"></span>
@@ -955,19 +1096,25 @@ function renderHtml(skills: Skill[]): string {
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
             </div>
             <h2>Select a skill</h2>
-            <p><span x-text="skills.length"></span> skills · <span x-text="totalFiles"></span> files indexed from <span class="mono">~/.claude/skills</span></p>
+            <p>
+              <span x-text="skills.length"></span> skills · <span x-text="totalFiles"></span> files
+              <template x-if="hasLocal">
+                <span> · <span x-text="localSkillCount" style="color:var(--local)"></span> local</span>
+              </template>
+            </p>
           </div>
         </template>
 
         <template x-if="selected">
-          <div class="workspace-inner fade-enter" :key="selected.name">
+          <div class="workspace-inner fade-enter" :key="selected.source + '/' + selected.name">
             <section class="skill-header">
               <div class="crumb">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
-                <span>Skill</span>
+                <span x-text="selected.source === 'local' ? 'Local Skill' : 'Skill'"></span>
               </div>
               <h1>
                 <span x-text="selected.name"></span>
+                <template x-if="selected.source === 'local'"><span class="local-pill" style="font-size:14px;padding:2px 8px;vertical-align:middle">local</span></template>
                 <template x-if="selected.isSymlink"><span class="symlink-pill">symlink</span></template>
               </h1>
               <p class="desc" x-text="selected.description"></p>
@@ -1003,7 +1150,7 @@ function renderHtml(skills: Skill[]): string {
             </section>
 
             <template x-if="selectedFile">
-              <section class="preview-card" :key="selected.name + '/' + selectedFile.path">
+              <section class="preview-card" :key="selected.source + '/' + selected.name + '/' + selectedFile.path">
                 <div class="preview-head">
                   <span class="path" x-text="selectedFile.path"></span>
                   <div class="actions">
@@ -1083,6 +1230,16 @@ function renderHtml(skills: Skill[]): string {
             if (this.skills.length > 0) this.select(this.skills[0]);
           },
 
+          get hasLocal() {
+            return this.skills.some(s => s.source === 'local');
+          },
+          get localSkillCount() {
+            return this.skills.filter(s => s.source === 'local').length;
+          },
+          get globalSkillCount() {
+            return this.skills.filter(s => s.source === 'global').length;
+          },
+
           get filteredSkills() {
             const q = this.query.trim().toLowerCase();
             if (!q) return this.skills;
@@ -1090,6 +1247,12 @@ function renderHtml(skills: Skill[]): string {
               s.name.toLowerCase().includes(q) ||
               s.description.toLowerCase().includes(q)
             );
+          },
+          get filteredLocalSkills() {
+            return this.filteredSkills.filter(s => s.source === 'local');
+          },
+          get filteredGlobalSkills() {
+            return this.filteredSkills.filter(s => s.source === 'global');
           },
 
           select(skill) {
@@ -1190,10 +1353,14 @@ async function runWeb(skills: Skill[]) {
   await writeFile(file, html, "utf8");
 
   const totalFiles = skills.reduce((acc, s) => acc + s.files.length, 0);
+  const localCount = skills.filter((s) => s.source === "local").length;
 
   console.log();
   console.log(`${c.bold}${c.cyan}see-claude-skills${c.reset} ${c.dim}— web preview${c.reset}`);
   console.log(`  ${c.green}✓${c.reset} ${skills.length} skill${skills.length === 1 ? "" : "s"}, ${totalFiles} files indexed`);
+  if (localCount > 0) {
+    console.log(`  ${c.yellow}✦${c.reset} ${localCount} local project skill${localCount === 1 ? "" : "s"} included`);
+  }
   console.log(`  ${c.gray}file://${file}${c.reset}`);
   console.log();
 
@@ -1208,13 +1375,17 @@ async function main() {
 
   if (wantsHelp) {
     console.log(`
-${c.bold}see-claude-skills${c.reset} — list skills installed in ~/.claude/skills
+${c.bold}see-claude-skills${c.reset} — list global and local project Claude skills
 
 ${c.bold}Usage:${c.reset}
   see-claude-skills            Interactive compact list (default)
   see-claude-skills --plain    Print plain list (good for piping)
   see-claude-skills --web      Open an HTML preview in your browser
   see-claude-skills --help     Show this help
+
+${c.bold}Sources:${c.reset}
+  Global    ~/.claude/skills
+  Local     .claude/skills (searched from cwd upward)
 
 ${c.bold}Interactive keys:${c.reset}
   ${c.dim}↑↓${c.reset} or ${c.dim}j/k${c.reset}    navigate
@@ -1229,7 +1400,7 @@ ${c.bold}Interactive keys:${c.reset}
   try {
     skills = await loadSkills();
   } catch (err) {
-    console.error(`${c.yellow}Could not read ${SKILLS_DIR}${c.reset}`);
+    console.error(`${c.yellow}Could not load skills${c.reset}`);
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
   }
